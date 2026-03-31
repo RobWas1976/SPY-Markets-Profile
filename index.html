@@ -1,0 +1,874 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SPY Market Profile</title>
+<link href="https://fonts.googleapis.com/css2?family=Syncopate:wght@400;700&family=IBM+Plex+Mono:wght@300;400;500;600&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:      #05080c;
+  --bg2:     #090e14;
+  --bg3:     #0e151e;
+  --bg4:     #131c28;
+  --border:  #1a2535;
+  --border2: #243040;
+  --text:    #d0dde8;
+  --text2:   #5a7a90;
+  --text3:   #2a404f;
+  --bull:    #00e676;
+  --bear:    #ff3d57;
+  --poc:     #ffd740;
+  --va:      rgba(0,180,255,0.13);
+  --vah:     #00b4ff;
+  --val:     #0077cc;
+  --ib:      rgba(180,120,255,0.10);
+  --acc:     #00cfff;
+  --tpo-bull: #1a7a4a;
+  --tpo-bear: #7a1a2a;
+  --tpo-poc:  #7a6a00;
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* Scanline overlay */
+body::after {
+  content:'';
+  position:fixed;
+  inset:0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0,0,0,0.08) 2px,
+    rgba(0,0,0,0.08) 4px
+  );
+  pointer-events:none;
+  z-index:9999;
+}
+
+.app { display:flex; flex-direction:column; height:100vh; padding:10px; gap:8px; }
+
+/* ── TOPBAR ── */
+.topbar {
+  display:flex; align-items:center; gap:16px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-top: 2px solid var(--acc);
+  padding: 10px 16px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.symbol {
+  font-family: 'Syncopate', sans-serif;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--acc);
+  letter-spacing: 4px;
+  text-shadow: 0 0 16px rgba(0,207,255,0.4);
+}
+
+.price-main {
+  font-family: 'Syncopate', sans-serif;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  transition: color 0.2s;
+}
+
+.price-chg { font-size: 11px; letter-spacing: 1px; }
+
+.stat-pill {
+  display:flex; flex-direction:column; align-items:flex-start;
+  padding: 4px 12px;
+  border-left: 1px solid var(--border);
+}
+.stat-pill .lbl { font-size: 8px; color: var(--text2); letter-spacing: 1.5px; text-transform:uppercase; }
+.stat-pill .val { font-size: 12px; color: var(--text); letter-spacing: 1px; }
+
+.conn-badge {
+  margin-left:auto;
+  display:flex; align-items:center; gap:6px;
+  font-size: 9px; letter-spacing: 1.5px;
+  color: var(--text2);
+}
+.conn-dot { width:7px; height:7px; border-radius:50%; background:var(--text3); transition:background 0.3s; }
+.conn-dot.live { background:var(--bull); box-shadow:0 0 8px var(--bull); animation:blink 2s infinite; }
+.conn-dot.error { background:var(--bear); }
+
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+/* ── API KEY BAR ── */
+.apibar {
+  display:flex; align-items:center; gap:10px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  padding: 10px 16px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+.apibar input {
+  flex:1; background:var(--bg3); border:1px solid var(--border2);
+  color:var(--text); font-family:'IBM Plex Mono',monospace; font-size:12px;
+  padding: 8px 12px; border-radius:2px; outline:none; letter-spacing:1px;
+}
+.apibar input:focus { border-color: var(--acc); }
+.apibar input::placeholder { color:var(--text3); }
+.btn {
+  background: var(--bg4); border: 1px solid var(--border2);
+  color: var(--acc); font-family:'IBM Plex Mono',monospace;
+  font-size: 10px; letter-spacing: 2px; text-transform:uppercase;
+  padding: 8px 18px; border-radius:2px; cursor:pointer;
+  transition: all 0.15s;
+}
+.btn:hover { background:rgba(0,207,255,0.08); border-color:var(--acc); }
+.btn.connect { background:rgba(0,207,255,0.1); border-color:rgba(0,207,255,0.4); }
+
+/* ── MAIN LAYOUT ── */
+.main { display:flex; gap:8px; flex:1; min-height:0; }
+
+/* ── PROFILE CANVAS ── */
+.profile-wrap {
+  flex:1; display:flex; flex-direction:column; min-width:0;
+  background: var(--bg2); border:1px solid var(--border); border-radius:3px;
+  overflow:hidden;
+}
+
+.profile-header {
+  display:flex; align-items:center; gap:12px; padding:8px 14px;
+  border-bottom:1px solid var(--border); flex-shrink:0;
+  font-size:9px; letter-spacing:1.5px; color:var(--text2);
+}
+
+.profile-header span { color:var(--text); }
+
+canvas#profileCanvas {
+  flex:1; width:100%; display:block;
+}
+
+/* ── RIGHT PANEL ── */
+.right-panel {
+  width: 240px; flex-shrink:0;
+  display:flex; flex-direction:column; gap:8px;
+}
+
+.card {
+  background: var(--bg2); border:1px solid var(--border); border-radius:3px;
+  padding:12px 14px;
+}
+
+.card-title {
+  font-size:8px; letter-spacing:2px; color:var(--text2);
+  text-transform:uppercase; margin-bottom:10px;
+  padding-bottom:6px; border-bottom:1px solid var(--border);
+}
+
+.level-row {
+  display:flex; justify-content:space-between; align-items:center;
+  padding:5px 0; border-bottom:1px solid var(--border);
+  font-size:10px;
+}
+.level-row:last-child { border-bottom:none; }
+.level-lbl { color:var(--text2); letter-spacing:0.5px; font-size:9px; }
+.level-val { letter-spacing:1px; font-weight:500; }
+
+/* TPO legend */
+.tpo-legend { display:flex; flex-wrap:wrap; gap:4px; margin-top:4px; }
+.tpo-chip {
+  width:20px; height:20px; display:flex; align-items:center; justify-content:center;
+  border-radius:2px; font-size:10px; font-weight:600;
+}
+
+/* Volume bar mini */
+.vol-bar-wrap { height:4px; background:var(--bg3); border-radius:2px; margin-top:4px; }
+.vol-bar { height:100%; border-radius:2px; background: linear-gradient(90deg, var(--acc), rgba(0,207,255,0.3)); transition:width 0.4s; }
+
+/* Session timer */
+.session-timer {
+  font-family:'Syncopate',sans-serif; font-size:14px; letter-spacing:2px;
+  color:var(--text2); text-align:center; margin-top:4px;
+}
+
+/* Log */
+.log-wrap {
+  flex:1; overflow-y:auto; font-size:9px; color:var(--text3);
+  line-height:1.6; letter-spacing:0.3px;
+  scrollbar-width:thin; scrollbar-color: var(--border) transparent;
+}
+.log-wrap span { display:block; }
+.log-wrap .log-info { color:var(--text2); }
+.log-wrap .log-trade { color:var(--acc); }
+.log-wrap .log-err { color:var(--bear); }
+
+/* Price flash */
+@keyframes flashGreen { 0%{background:rgba(0,230,118,0.25)} 100%{background:transparent} }
+@keyframes flashRed   { 0%{background:rgba(255,61,87,0.25)}  100%{background:transparent} }
+.flash-up   { animation: flashGreen 0.4s ease; }
+.flash-down { animation: flashRed   0.4s ease; }
+
+/* Empty state */
+.empty-state {
+  flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:12px; color:var(--text3);
+}
+.empty-state .big { font-family:'Syncopate',sans-serif; font-size:11px; letter-spacing:3px; }
+.empty-state .small { font-size:9px; letter-spacing:1px; line-height:1.8; text-align:center; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- TOPBAR -->
+  <div class="topbar">
+    <div class="symbol">SPY</div>
+    <div>
+      <div class="price-main" id="price">———.——</div>
+      <div class="price-chg" id="priceChg" style="color:var(--text2)">+0.00 (0.00%)</div>
+    </div>
+    <div class="stat-pill"><div class="lbl">HIGH</div><div class="val" id="dayHigh">—</div></div>
+    <div class="stat-pill"><div class="lbl">LOW</div><div class="val" id="dayLow">—</div></div>
+    <div class="stat-pill"><div class="lbl">OPEN</div><div class="val" id="dayOpen">—</div></div>
+    <div class="stat-pill"><div class="lbl">VOLUME</div><div class="val" id="dayVol">—</div></div>
+    <div class="stat-pill"><div class="lbl">TRADES</div><div class="val" id="tradeCount">0</div></div>
+    <div class="stat-pill"><div class="lbl">SESSION</div><div class="val session-timer" id="sessionTimer" style="font-size:11px;">--:--:--</div></div>
+    <div class="conn-badge">
+      <div class="conn-dot" id="connDot"></div>
+      <span id="connStatus">DISCONNECTED</span>
+    </div>
+  </div>
+
+  <!-- API KEY BAR -->
+  <div class="apibar" id="apibar">
+    <span style="color:var(--text2);font-size:9px;letter-spacing:1.5px;white-space:nowrap;">FINNHUB API KEY</span>
+    <input type="text" id="apiKeyInput" placeholder="Wklej klucz z finnhub.io (darmowy)" />
+    <button class="btn connect" onclick="connect()">CONNECT</button>
+    <button class="btn" onclick="resetDay()">RESET DAY</button>
+    <a href="https://finnhub.io/register" target="_blank" class="btn" style="text-decoration:none;color:var(--text2);font-size:9px;">GET FREE KEY ↗</a>
+  </div>
+
+  <!-- MAIN -->
+  <div class="main">
+
+    <!-- PROFILE CANVAS -->
+    <div class="profile-wrap">
+      <div class="profile-header">
+        <span style="color:var(--acc);font-family:'Syncopate',sans-serif;font-size:9px;letter-spacing:2px;">MARKET PROFILE</span>
+        <span>TPO: <span id="hdr-tpo">—</span></span>
+        <span>POC: <span id="hdr-poc" style="color:var(--poc)">—</span></span>
+        <span>VAH: <span id="hdr-vah" style="color:var(--vah)">—</span></span>
+        <span>VAL: <span id="hdr-val" style="color:var(--val)">—</span></span>
+        <span>IB H: <span id="hdr-ibh" style="color:#b478ff">—</span></span>
+        <span>IB L: <span id="hdr-ibl" style="color:#8040cc">—</span></span>
+        <span style="margin-left:auto;font-size:9px;color:var(--text3)" id="hdr-period">Tick size: $0.10</span>
+      </div>
+      <canvas id="profileCanvas"></canvas>
+      <div class="empty-state" id="emptyState">
+        <div class="big">AWAITING DATA</div>
+        <div class="small">Wklej API key z Finnhub<br>i kliknij CONNECT<br><br>finnhub.io → darmowa rejestracja<br>→ Dashboard → API Key</div>
+      </div>
+    </div>
+
+    <!-- RIGHT PANEL -->
+    <div class="right-panel">
+
+      <!-- KEY LEVELS -->
+      <div class="card">
+        <div class="card-title">Key Levels</div>
+        <div class="level-row"><div class="level-lbl">POC</div><div class="level-val" id="kl-poc" style="color:var(--poc)">—</div></div>
+        <div class="level-row"><div class="level-lbl">VAH (70%)</div><div class="level-val" id="kl-vah" style="color:var(--vah)">—</div></div>
+        <div class="level-row"><div class="level-lbl">VAL (70%)</div><div class="level-val" id="kl-val" style="color:var(--val)">—</div></div>
+        <div class="level-row"><div class="level-lbl">IB High</div><div class="level-val" id="kl-ibh" style="color:#b478ff">—</div></div>
+        <div class="level-row"><div class="level-lbl">IB Low</div><div class="level-val" id="kl-ibl" style="color:#8040cc">—</div></div>
+        <div class="level-row"><div class="level-lbl">Day High</div><div class="level-val" id="kl-dh" style="color:var(--bull)">—</div></div>
+        <div class="level-row"><div class="level-lbl">Day Low</div><div class="level-val" id="kl-dl" style="color:var(--bear)">—</div></div>
+      </div>
+
+      <!-- TPO LEGEND -->
+      <div class="card">
+        <div class="card-title">TPO Periods</div>
+        <div class="tpo-legend" id="tpoLegend">
+          <div style="font-size:9px;color:var(--text3)">Brak danych</div>
+        </div>
+        <div style="margin-top:10px;">
+          <div style="font-size:9px;color:var(--text2);letter-spacing:1px;margin-bottom:4px;">CURRENT PERIOD</div>
+          <div style="font-family:'Syncopate',sans-serif;font-size:16px;color:var(--acc);letter-spacing:3px;" id="curPeriod">—</div>
+          <div style="font-size:9px;color:var(--text3);margin-top:2px;" id="curPeriodTime"></div>
+        </div>
+      </div>
+
+      <!-- VOLUME PROFILE MINI -->
+      <div class="card" style="flex:1;display:flex;flex-direction:column;">
+        <div class="card-title">Activity Log</div>
+        <div class="log-wrap" id="logWrap"></div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════
+// CONFIG
+// ══════════════════════════════════════════════
+const TICK = 0.10;          // price bucket size
+const TPO_MINUTES = 30;     // minutes per TPO period
+const VA_PCT = 0.70;        // Value Area = 70% of TPOs
+
+const TPO_LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
+
+// ══════════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════════
+let ws = null;
+let apiKey = '';
+
+let priceData = {
+  last: null, open: null, high: null, low: null,
+  prevClose: null, volume: 0, tradeCount: 0,
+};
+
+// Market Profile data: Map<priceBucket -> Set<periodLetter>>
+let mpData = new Map();   // bucket -> Set of TPO letters
+let volData = new Map();  // bucket -> volume at price
+
+let currentPeriod = 0;    // 0 = A, 1 = B ...
+let periodStart = null;   // Date when current period started
+let sessionStart = null;
+
+let ibHigh = null, ibLow = null; // Initial Balance (first 60min = A+B)
+
+let lastPrice = null;
+let animFrame = null;
+
+// ══════════════════════════════════════════════
+// HELPERS
+// ══════════════════════════════════════════════
+function bucket(price) {
+  return Math.round(price / TICK) * TICK;
+}
+
+function fmt(p) {
+  return p !== null && p !== undefined ? p.toFixed(2) : '—';
+}
+
+function fmtVol(v) {
+  if (v >= 1e6) return (v/1e6).toFixed(1) + 'M';
+  if (v >= 1e3) return (v/1e3).toFixed(0) + 'K';
+  return v.toString();
+}
+
+function log(msg, cls='log-info') {
+  const el = document.getElementById('logWrap');
+  const now = new Date().toLocaleTimeString('en-US',{hour12:false,hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  const span = document.createElement('span');
+  span.className = cls;
+  span.textContent = `[${now}] ${msg}`;
+  el.appendChild(span);
+  el.scrollTop = el.scrollHeight;
+  // Keep max 200 lines
+  while (el.children.length > 200) el.removeChild(el.firstChild);
+}
+
+function getPeriodLetter() {
+  return TPO_LETTERS[Math.min(currentPeriod, TPO_LETTERS.length - 1)];
+}
+
+function getCurrentPeriod() {
+  if (!sessionStart) return;
+  const now = Date.now();
+  const elapsed = (now - sessionStart) / 60000; // minutes
+  const p = Math.floor(elapsed / TPO_MINUTES);
+  if (p !== currentPeriod) {
+    currentPeriod = p;
+    periodStart = new Date(sessionStart + p * TPO_MINUTES * 60000);
+    log(`New TPO period: ${getPeriodLetter()}`, 'log-info');
+    // Update IB after period B (first 60min)
+    if (currentPeriod === 2 && priceData.high && priceData.low) {
+      // IB is locked after first 2 periods
+    }
+  }
+}
+
+// ══════════════════════════════════════════════
+// CONNECT
+// ══════════════════════════════════════════════
+function connect() {
+  apiKey = document.getElementById('apiKeyInput').value.trim();
+  if (!apiKey) { log('Brak API key!', 'log-err'); return; }
+
+  if (ws) { ws.close(); ws = null; }
+
+  setConnStatus('connecting');
+  log('Connecting to Finnhub...', 'log-info');
+
+  ws = new WebSocket(`wss://ws.finnhub.io?token=${apiKey}`);
+
+  ws.onopen = () => {
+    setConnStatus('live');
+    ws.send(JSON.stringify({ type: 'subscribe', symbol: 'SPY' }));
+    log('Subscribed to SPY trades', 'log-trade');
+
+    // Also fetch quote for open/prevClose
+    fetchQuote();
+
+    if (!sessionStart) {
+      sessionStart = Date.now();
+      periodStart = new Date(sessionStart);
+      log('Session started — Period A', 'log-info');
+    }
+
+    document.getElementById('emptyState').style.display = 'none';
+    document.getElementById('profileCanvas').style.display = 'block';
+  };
+
+  ws.onmessage = (evt) => {
+    try {
+      const msg = JSON.parse(evt.data);
+      if (msg.type === 'trade' && msg.data) {
+        msg.data.forEach(t => processTrade(t));
+      }
+    } catch(e) {}
+  };
+
+  ws.onerror = () => { setConnStatus('error'); log('WebSocket error', 'log-err'); };
+  ws.onclose = () => { setConnStatus('disconnected'); log('Connection closed', 'log-err'); };
+}
+
+async function fetchQuote() {
+  try {
+    const r = await fetch(`https://finnhub.io/api/v1/quote?symbol=SPY&token=${apiKey}`);
+    const d = await r.json();
+    if (d.o) {
+      priceData.open = d.o;
+      priceData.prevClose = d.pc;
+      if (!priceData.high) priceData.high = d.h;
+      if (!priceData.low) priceData.low = d.l;
+      document.getElementById('dayOpen').textContent = fmt(d.o);
+      log(`Quote: O=${fmt(d.o)} PC=${fmt(d.pc)}`, 'log-info');
+    }
+  } catch(e) { log('Quote fetch failed', 'log-err'); }
+}
+
+// ══════════════════════════════════════════════
+// PROCESS TRADE
+// ══════════════════════════════════════════════
+function processTrade(t) {
+  const price = t.p;
+  const vol = t.v || 1;
+
+  getCurrentPeriod();
+
+  // Update price
+  priceData.last = price;
+  priceData.volume += vol;
+  priceData.tradeCount++;
+
+  if (priceData.high === null || price > priceData.high) priceData.high = price;
+  if (priceData.low  === null || price < priceData.low)  priceData.low  = price;
+  if (priceData.open === null) priceData.open = price;
+
+  // IB: first 2 periods (A + B = 60 min)
+  if (currentPeriod < 2) {
+    if (ibHigh === null || price > ibHigh) ibHigh = price;
+    if (ibLow  === null || price < ibLow)  ibLow  = price;
+  }
+
+  // Add to Market Profile
+  const b = bucket(price);
+  const letter = getPeriodLetter();
+
+  if (!mpData.has(b)) mpData.set(b, new Set());
+  mpData.get(b).add(letter);
+
+  if (!volData.has(b)) volData.set(b, 0);
+  volData.set(b, volData.get(b) + vol);
+
+  lastPrice = price;
+}
+
+// ══════════════════════════════════════════════
+// COMPUTE PROFILE STATS
+// ══════════════════════════════════════════════
+function computeStats() {
+  if (mpData.size === 0) return null;
+
+  const buckets = [...mpData.keys()].sort((a,b) => a - b);
+  const tpoCount = b => mpData.get(b).size;
+
+  // POC = bucket with most TPOs (tie-break: volume)
+  let poc = buckets.reduce((best, b) => {
+    const c = tpoCount(b);
+    const bc = tpoCount(best);
+    if (c > bc) return b;
+    if (c === bc && (volData.get(b)||0) > (volData.get(best)||0)) return b;
+    return best;
+  }, buckets[0]);
+
+  // Total TPOs
+  const totalTPO = buckets.reduce((s, b) => s + tpoCount(b), 0);
+  const target = Math.ceil(totalTPO * VA_PCT);
+
+  // Value Area: expand from POC up/down alternating
+  let vaSet = new Set([poc]);
+  let vaTpo = tpoCount(poc);
+  let lo = buckets.indexOf(poc);
+  let hi = lo;
+
+  while (vaTpo < target && (lo > 0 || hi < buckets.length - 1)) {
+    const upIdx = hi + 1;
+    const dnIdx = lo - 1;
+    const upTpo = upIdx < buckets.length ? tpoCount(buckets[upIdx]) : 0;
+    const dnTpo = dnIdx >= 0 ? tpoCount(buckets[dnIdx]) : 0;
+
+    if (upTpo >= dnTpo && upIdx < buckets.length) {
+      hi = upIdx; vaSet.add(buckets[hi]); vaTpo += upTpo;
+    } else if (dnIdx >= 0) {
+      lo = dnIdx; vaSet.add(buckets[lo]); vaTpo += dnTpo;
+    } else if (upIdx < buckets.length) {
+      hi = upIdx; vaSet.add(buckets[hi]); vaTpo += upTpo;
+    } else break;
+  }
+
+  const vaArr = [...vaSet].sort((a,b) => a - b);
+  const vah = vaArr[vaArr.length - 1];
+  const val = vaArr[0];
+
+  return { poc, vah, val, buckets, totalTPO };
+}
+
+// ══════════════════════════════════════════════
+// RENDER
+// ══════════════════════════════════════════════
+function render() {
+  updateTopbar();
+  updateSidebar();
+  drawProfile();
+  animFrame = requestAnimationFrame(render);
+}
+
+function updateTopbar() {
+  const p = priceData;
+
+  // Price
+  const priceEl = document.getElementById('price');
+  if (p.last !== null) {
+    const newTxt = fmt(p.last);
+    if (priceEl.textContent !== newTxt) {
+      const dir = p.last > (lastPrice || p.last) ? 'up' : 'down';
+      priceEl.textContent = newTxt;
+      priceEl.style.color = p.last > (p.prevClose||p.last) ? 'var(--bull)' : p.last < (p.prevClose||p.last) ? 'var(--bear)' : 'var(--text)';
+      priceEl.classList.remove('flash-up','flash-down');
+      void priceEl.offsetWidth;
+      priceEl.classList.add(dir === 'up' ? 'flash-up' : 'flash-down');
+    }
+  }
+
+  // Change
+  if (p.last && p.prevClose) {
+    const chg = p.last - p.prevClose;
+    const pct = (chg / p.prevClose) * 100;
+    const chgEl = document.getElementById('priceChg');
+    chgEl.textContent = `${chg>=0?'+':''}${chg.toFixed(2)} (${chg>=0?'+':''}${pct.toFixed(2)}%)`;
+    chgEl.style.color = chg >= 0 ? 'var(--bull)' : 'var(--bear)';
+  }
+
+  document.getElementById('dayHigh').textContent = fmt(p.high);
+  document.getElementById('dayLow').textContent  = fmt(p.low);
+  document.getElementById('dayOpen').textContent = fmt(p.open);
+  document.getElementById('dayVol').textContent  = fmtVol(p.volume);
+  document.getElementById('tradeCount').textContent = p.tradeCount.toLocaleString();
+
+  // Session timer
+  if (sessionStart) {
+    const elapsed = Math.floor((Date.now() - sessionStart) / 1000);
+    const h = Math.floor(elapsed/3600);
+    const m = Math.floor((elapsed%3600)/60);
+    const s = elapsed%60;
+    document.getElementById('sessionTimer').textContent =
+      `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  }
+
+  // Current period
+  const letter = getPeriodLetter();
+  document.getElementById('curPeriod').textContent = letter;
+  if (periodStart) {
+    const endT = new Date(periodStart.getTime() + TPO_MINUTES * 60000);
+    document.getElementById('curPeriodTime').textContent =
+      periodStart.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:false}) +
+      ' → ' + endT.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:false});
+  }
+}
+
+function updateSidebar() {
+  const stats = computeStats();
+  if (!stats) return;
+
+  const { poc, vah, val } = stats;
+
+  document.getElementById('kl-poc').textContent = fmt(poc);
+  document.getElementById('kl-vah').textContent = fmt(vah);
+  document.getElementById('kl-val').textContent = fmt(val);
+  document.getElementById('kl-ibh').textContent = ibHigh ? fmt(ibHigh) : '—';
+  document.getElementById('kl-ibl').textContent = ibLow  ? fmt(ibLow)  : '—';
+  document.getElementById('kl-dh').textContent  = fmt(priceData.high);
+  document.getElementById('kl-dl').textContent  = fmt(priceData.low);
+
+  document.getElementById('hdr-poc').textContent = fmt(poc);
+  document.getElementById('hdr-vah').textContent = fmt(vah);
+  document.getElementById('hdr-val').textContent = fmt(val);
+  document.getElementById('hdr-ibh').textContent = ibHigh ? fmt(ibHigh) : '—';
+  document.getElementById('hdr-ibl').textContent = ibLow  ? fmt(ibLow)  : '—';
+  document.getElementById('hdr-tpo').textContent = stats.totalTPO;
+
+  // TPO legend
+  const allLetters = new Set([...mpData.values()].flatMap(s => [...s]));
+  const legEl = document.getElementById('tpoLegend');
+  legEl.innerHTML = '';
+  [...allLetters].forEach(l => {
+    const chip = document.createElement('div');
+    chip.className = 'tpo-chip';
+    chip.textContent = l;
+    chip.style.background = `hsl(${(l.charCodeAt(0)*37)%360},40%,20%)`;
+    chip.style.color = `hsl(${(l.charCodeAt(0)*37)%360},60%,70%)`;
+    chip.title = `Period ${l}`;
+    legEl.appendChild(chip);
+  });
+}
+
+// ══════════════════════════════════════════════
+// DRAW MARKET PROFILE ON CANVAS
+// ══════════════════════════════════════════════
+function drawProfile() {
+  const canvas = document.getElementById('profileCanvas');
+  if (mpData.size === 0) return;
+
+  const dpr = window.devicePixelRatio || 1;
+  const W = canvas.parentElement.clientWidth;
+  const H = canvas.parentElement.clientHeight - 36; // minus header
+
+  if (canvas.width !== W * dpr || canvas.height !== H * dpr) {
+    canvas.width  = W * dpr;
+    canvas.height = H * dpr;
+    canvas.style.width  = W + 'px';
+    canvas.style.height = H + 'px';
+  }
+
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, W, H);
+
+  const stats = computeStats();
+  if (!stats) return;
+  const { poc, vah, val, buckets } = stats;
+
+  const PRICE_W = 58;   // left: price labels
+  const VOL_W   = 50;   // right: volume bars
+  const PAD_T   = 8;
+  const PAD_B   = 8;
+
+  const profileW = W - PRICE_W - VOL_W - 8;
+  const profileX = PRICE_W;
+
+  // Price range with padding
+  const pMin = buckets[0] - TICK * 2;
+  const pMax = buckets[buckets.length - 1] + TICK * 2;
+  const pRange = pMax - pMin;
+
+  const rowH = Math.max(2, (H - PAD_T - PAD_B) / (pRange / TICK));
+  const priceToY = p => PAD_T + ((pMax - p) / pRange) * (H - PAD_T - PAD_B);
+
+  // Max TPO for bar width scaling
+  const maxTPO = Math.max(...buckets.map(b => mpData.get(b).size));
+  const maxVol  = Math.max(...[...volData.values()]);
+
+  // ── Background grid ──
+  ctx.fillStyle = '#090e14';
+  ctx.fillRect(0, 0, W, H);
+
+  // Subtle price grid lines
+  buckets.forEach(b => {
+    const y = priceToY(b);
+    ctx.strokeStyle = 'rgba(26,37,53,0.6)';
+    ctx.lineWidth = 0.5;
+    ctx.beginPath(); ctx.moveTo(PRICE_W, y); ctx.lineTo(W - VOL_W, y); ctx.stroke();
+  });
+
+  // ── Value Area background ──
+  const vahY = priceToY(vah + TICK);
+  const valY = priceToY(val);
+  ctx.fillStyle = 'rgba(0,150,255,0.055)';
+  ctx.fillRect(profileX, vahY, profileW, valY - vahY);
+
+  // ── IB background ──
+  if (ibHigh && ibLow) {
+    const ibhY = priceToY(ibHigh + TICK);
+    const iblY = priceToY(ibLow);
+    ctx.fillStyle = 'rgba(180,120,255,0.04)';
+    ctx.fillRect(profileX, ibhY, profileW, iblY - ibhY);
+  }
+
+  // ── TPO Bars ──
+  buckets.forEach(b => {
+    const letters = [...mpData.get(b)].sort();
+    const y = priceToY(b);
+    const barH = Math.max(1.5, rowH - 1);
+    const isVA  = b >= val && b <= vah;
+    const isPOC = Math.abs(b - poc) < 0.001;
+
+    // Each letter as a block
+    const blockW = Math.min(20, profileW / maxTPO * 0.9);
+
+    letters.forEach((letter, i) => {
+      const x = profileX + i * (blockW + 1);
+      const hue = (letter.charCodeAt(0) * 37) % 360;
+
+      if (isPOC) {
+        ctx.fillStyle = `rgba(255,215,64,0.25)`;
+      } else if (isVA) {
+        ctx.fillStyle = `hsla(${hue},50%,30%,0.8)`;
+      } else {
+        ctx.fillStyle = `hsla(${hue},30%,22%,0.8)`;
+      }
+
+      ctx.fillRect(x, y - barH + 1, blockW, barH - 1);
+
+      // Letter label if big enough
+      if (barH >= 9 && blockW >= 8) {
+        ctx.fillStyle = isPOC ? 'rgba(255,215,64,0.9)' : `hsla(${hue},60%,70%,0.9)`;
+        ctx.font = `${Math.min(barH - 2, 9)}px "IBM Plex Mono"`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(letter, x + blockW/2, y - barH/2);
+      }
+    });
+  });
+
+  // ── Volume bars (right side) ──
+  buckets.forEach(b => {
+    const v = volData.get(b) || 0;
+    const y = priceToY(b);
+    const barH = Math.max(1, rowH - 1.5);
+    const bw = (v / maxVol) * VOL_W * 0.85;
+    const isPOC = Math.abs(b - poc) < 0.001;
+
+    ctx.fillStyle = isPOC ? 'rgba(255,215,64,0.3)' :
+                   (b >= val && b <= vah) ? 'rgba(0,150,255,0.2)' : 'rgba(255,255,255,0.06)';
+    ctx.fillRect(W - VOL_W + 2, y - barH + 1, bw, barH - 1);
+  });
+
+  // ── Horizontal lines for key levels ──
+  const drawLevel = (price, color, label, dashed) => {
+    if (price === null) return;
+    const y = priceToY(price);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1;
+    if (dashed) ctx.setLineDash([4, 4]); else ctx.setLineDash([]);
+    ctx.beginPath(); ctx.moveTo(PRICE_W, y); ctx.lineTo(W - VOL_W, y); ctx.stroke();
+    ctx.setLineDash([]);
+
+    ctx.fillStyle = color;
+    ctx.font = '8px "IBM Plex Mono"';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(label, PRICE_W - 2, y);
+  };
+
+  // POC
+  drawLevel(poc, 'rgba(255,215,64,0.7)', fmt(poc) + ' POC', false);
+  // VAH
+  drawLevel(vah, 'rgba(0,180,255,0.6)', fmt(vah) + ' VAH', true);
+  // VAL
+  drawLevel(val, 'rgba(0,119,204,0.6)', fmt(val) + ' VAL', true);
+  // IB
+  if (ibHigh) drawLevel(ibHigh, 'rgba(180,120,255,0.5)', fmt(ibHigh) + ' IBH', true);
+  if (ibLow)  drawLevel(ibLow,  'rgba(128,64,204,0.5)',  fmt(ibLow)  + ' IBL', true);
+  // Day High/Low
+  drawLevel(priceData.high, 'rgba(0,230,118,0.4)', fmt(priceData.high) + ' H', true);
+  drawLevel(priceData.low,  'rgba(255,61,87,0.4)',  fmt(priceData.low)  + ' L', true);
+
+  // ── Current price line ──
+  if (priceData.last) {
+    const y = priceToY(priceData.last);
+    const grad = ctx.createLinearGradient(PRICE_W, 0, W - VOL_W, 0);
+    grad.addColorStop(0, 'rgba(0,207,255,0.8)');
+    grad.addColorStop(1, 'rgba(0,207,255,0.1)');
+    ctx.strokeStyle = grad;
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([]);
+    ctx.beginPath(); ctx.moveTo(PRICE_W, y); ctx.lineTo(W - VOL_W, y); ctx.stroke();
+
+    // Price tag
+    ctx.fillStyle = 'rgba(0,207,255,0.9)';
+    ctx.fillRect(W - VOL_W, y - 7, VOL_W, 14);
+    ctx.fillStyle = '#000';
+    ctx.font = 'bold 9px "IBM Plex Mono"';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(fmt(priceData.last), W - VOL_W + VOL_W/2, y);
+  }
+
+  ctx.scale(1/dpr, 1/dpr);
+}
+
+// ══════════════════════════════════════════════
+// CONNECTION STATUS
+// ══════════════════════════════════════════════
+function setConnStatus(state) {
+  const dot = document.getElementById('connDot');
+  const txt = document.getElementById('connStatus');
+  dot.className = 'conn-dot';
+  if (state === 'live') { dot.classList.add('live'); txt.textContent = 'LIVE'; }
+  else if (state === 'connecting') { txt.textContent = 'CONNECTING...'; }
+  else if (state === 'error') { dot.classList.add('error'); txt.textContent = 'ERROR'; }
+  else { txt.textContent = 'DISCONNECTED'; }
+}
+
+// ══════════════════════════════════════════════
+// RESET
+// ══════════════════════════════════════════════
+function resetDay() {
+  mpData.clear();
+  volData.clear();
+  priceData = { last:null, open:null, high:null, low:null, prevClose:priceData.prevClose, volume:0, tradeCount:0 };
+  ibHigh = null; ibLow = null;
+  currentPeriod = 0;
+  sessionStart = ws ? Date.now() : null;
+  periodStart = sessionStart ? new Date(sessionStart) : null;
+  document.getElementById('logWrap').innerHTML = '';
+  log('Day reset', 'log-info');
+
+  const canvas = document.getElementById('profileCanvas');
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+}
+
+// ══════════════════════════════════════════════
+// KEYBOARD
+// ══════════════════════════════════════════════
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && document.activeElement.id === 'apiKeyInput') connect();
+});
+
+// ══════════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════════
+document.getElementById('profileCanvas').style.display = 'none';
+window.addEventListener('resize', () => { drawProfile(); });
+animFrame = requestAnimationFrame(render);
+
+log('SPY Market Profile ready', 'log-info');
+log('Wklej API key z finnhub.io i kliknij CONNECT', 'log-info');
+log('finnhub.io → darmowa rejestracja (30 sek) → API Key', 'log-info');
+</script>
+</body>
+</html>
